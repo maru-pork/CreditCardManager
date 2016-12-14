@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="fill_parent"
+    android:layout_height="match_parent">
+    <TableLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingRight="15dp"
+        android:paddingLeft="15dp"
+        android:paddingTop="15dp"
+        android:paddingBottom="15dp"
+        android:stretchColumns="1">
+        <!--Transaction Date -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranDate" />
+            <EditText
+                android:id="@+id/et_cc_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:textAlignment="textStart" />
+        </TableRow>
+        <!-- Description -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranDescription" />
+            <AutoCompleteTextView
+                android:id="@+id/et_cc_desc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:textAlignment="textStart"/>
+        </TableRow>
+        <!-- Principal Amount -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_principal_amount"/>
+            <EditText
+                android:id="@+id/et_cc_principalAmount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:inputType="numberDecimal"
+                android:textAlignment="textEnd" />
+        </TableRow>
+        <!-- Number of Months To Pay -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_months_to_pay"/>
+            <EditText
+                android:id="@+id/et_cc_monthsToPay"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:inputType="number"
+                android:textAlignment="textEnd" />
+        </TableRow>
+        <!-- Monthly Amortization -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_monthly_amortization"/>
+            <EditText
+                android:id="@+id/et_cc_monthlyAmortization"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:enabled="false"
+                android:textAlignment="textEnd"/>
+        </TableRow>
+        <!-- Until -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_end_date"/>
+            <EditText
+                android:id="@+id/et_cc_end_date"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:enabled="false" />
+        </TableRow>
+        <!-- Action Button -->
+        <TableRow>
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_column="1"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btn_cc_inst_cancel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/cancel"/>
+                <Button
+                    android:id="@+id/btn_cc_inst_add"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_cc_add"/>
+            </LinearLayout>
+        </TableRow>
+    </TableLayout>
+</LinearLayout>

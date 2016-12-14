@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <TableLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:paddingRight="15dp"
+        android:paddingLeft="15dp"
+        android:paddingTop="15dp"
+        android:paddingBottom="15dp"
+        android:stretchColumns="1">
+        <!--Transaction Date -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranDate" />
+            <EditText
+                android:id="@+id/et_cc_tranDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:textAlignment="textStart" />
+        </TableRow>
+        <!--Transaction Type -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranType" />
+            <Spinner
+                android:id="@+id/sp_cc_tranType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"/>
+        </TableRow>
+        <!-- Description -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranDescription" />
+            <AutoCompleteTextView
+                android:id="@+id/at_cc_tranDesc"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:textAlignment="textStart"/>
+            <Spinner
+                android:id="@+id/sp_cc_installment"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:visibility="gone"/>
+        </TableRow>
+        <!-- Amount -->
+        <TableRow>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_tranAmount"
+                />
+            <EditText
+                android:id="@+id/et_cc_tranAmount"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:padding="10dp"
+                android:inputType="numberDecimal"
+                android:textAlignment="textEnd" />
+        </TableRow>
+        <!-- Includes Monthly Amortization-->
+        <TableRow
+            android:id="@+id/tr_cc_include"
+            android:visibility="gone">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textStyle="bold|italic"
+                android:text="@string/prompt_cc_include"/>
+            <ListView
+                android:id="@+id/lv_cc_credit_inst"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+        </TableRow>
+        <!-- Action Button -->
+        <TableRow>
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_column="1"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btn_cc_cancel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/cancel"/>
+                <Button
+                    android:id="@+id/btn_cc_add"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_cc_add"/>
+            </LinearLayout>
+        </TableRow>
+    </TableLayout>
+</LinearLayout>
