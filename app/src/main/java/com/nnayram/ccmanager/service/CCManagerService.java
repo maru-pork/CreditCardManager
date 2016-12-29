@@ -3,15 +3,20 @@ package com.nnayram.ccmanager.service;
 import android.content.Context;
 
 import com.nnayram.ccmanager.core.ResultWrapper;
-import com.nnayram.ccmanager.db.DBContract;
+import com.nnayram.ccmanager.model.CCInstallmentPayment;
 import com.nnayram.ccmanager.model.CcInstallment;
 import com.nnayram.ccmanager.model.CcTransaction;
 import com.nnayram.ccmanager.model.CreditTransactionType;
 
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.joda.time.LocalDate;
+import org.joda.time.Months;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -27,6 +32,11 @@ public class CCManagerService {
         this.context = context;
     }
 
+    /**
+     * Add new Transaction
+     * @param transaction
+     * @return resultWrapper
+     */
     public ResultWrapper<CcTransaction> addTransaction(CcTransaction transaction) {
         ResultWrapper<CcTransaction> resultWrapper = new ResultWrapper<>();
         List<String> errorMessages = new ArrayList<>();
@@ -35,6 +45,7 @@ public class CCManagerService {
         errorMessages.addAll(validate(transaction));
         if (errorMessages.isEmpty()) {
             try {
+                long id = 0;
                 switch (CreditTransactionType.valueOf(transaction.getType())) {
                     case PAYMENT:
                         List<Long> creditIds = new ArrayList<>();
@@ -42,15 +53,22 @@ public class CCManagerService {
                             creditIds.add(tran.getId());
                         }
                         String[] creditArray = creditIds.isEmpty() ? null : StringUtils.join(creditIds, ",").split(",");
-                        repository.insertTransaction(transaction.getTranDate(),
+                        id = repository.insertTransaction(transaction.getTranDate(),
                                 transaction.getType(),
                                 transaction.getDescription(),
                                 transaction.getAmount(),
                                 creditArray);
+
+                        // check for installments that are not active, update database if any
+                        for (CcInstallment i : getInstallments(false)) {
+                            if (BooleanUtils.isFalse(i.isActive())) {
+                                repository.updateInstallment(i.getId(), i.getActive());
+                            }
+                        }
                         break;
 
                     case CREDIT_INST:
-                        repository.insertTransaction(transaction.getTranDate(),
+                        id = repository.insertTransaction(transaction.getTranDate(),
                                 transaction.getType(),
                                 transaction.getInstallment().getDescription(),
                                 transaction.getAmount(),
@@ -59,12 +77,15 @@ public class CCManagerService {
 
                     default:
                         // for CREDIT, CREDIT_CHARGE
-                        repository.insertTransaction(transaction.getTranDate(),
+                        id = repository.insertTransaction(transaction.getTranDate(),
                                 transaction.getType(),
                                 transaction.getDescription(),
                                 transaction.getAmount());
                         break;
                 }
+
+                transaction.setId(id);
+                resultWrapper.setEntity(transaction);
             } catch (Exception e) {
                 errorMessages.add(e.getMessage());
             }
@@ -72,6 +93,11 @@ public class CCManagerService {
         return resultWrapper;
     }
 
+    /**
+     * Delete existing transaction
+     * @param ccTransaction
+     * @return resultWrapper
+     */
     public ResultWrapper<CcTransaction> deleteTransaction(CcTransaction ccTransaction) {
         ResultWrapper<CcTransaction> resultWrapper = new ResultWrapper<>();
         List<String> errorMessages = new ArrayList<>();
@@ -83,6 +109,13 @@ public class CCManagerService {
         if (errorMessages.isEmpty()) {
             try {
                 repository.deleteTransaction(ccTransaction.getId(), ccTransaction.getType());
+
+                if (Arrays.asList(CreditTransactionType.CREDIT_INST.name(), CreditTransactionType.PAYMENT.name()).contains(ccTransaction.getType())) {
+                    // update Installments active property
+                    for (CcInstallment i : getInstallments(false)) {
+                        repository.updateInstallment(i.getId(), i.getActive());
+                    }
+                }
             } catch (Exception e) {
                 errorMessages.add(e.getMessage());
             }
@@ -91,6 +124,11 @@ public class CCManagerService {
         return resultWrapper;
     }
 
+    /**
+     * Add new Installment
+     * @param ccInstallment
+     * @return resultWrapper
+     */
     public ResultWrapper<CcInstallment> addInstallment(CcInstallment ccInstallment) {
         ResultWrapper<CcInstallment> resultWrapper = new ResultWrapper<>();
         List<String> errorMessages = new ArrayList<>();
@@ -99,7 +137,7 @@ public class CCManagerService {
         errorMessages.addAll(validate(ccInstallment));
         if (errorMessages.isEmpty()) {
             try {
-                repository.insertInstallment(ccInstallment.getDate(),
+                long id = repository.insertInstallment(ccInstallment.getDate(),
                     ccInstallment.getDescription(),
                     ccInstallment.getPrincipalAmount(),
                     ccInstallment.getMonthsToPay(),
@@ -107,6 +145,32 @@ public class CCManagerService {
                     ccInstallment.getStartDate(),
                     ccInstallment.getEndDate(),
                     1);
+
+                ccInstallment.setId(id);
+                resultWrapper.setEntity(ccInstallment);
+            } catch (Exception e) {
+                errorMessages.add(e.getMessage());
+            }
+        }
+        return resultWrapper;
+    }
+
+    /**
+     * Delete existing installment
+     * @param ccInstallment
+     * @return resultWrapper
+     */
+    public ResultWrapper<CcInstallment> deleteInstallment(CcInstallment ccInstallment) {
+        ResultWrapper<CcInstallment> resultWrapper = new ResultWrapper<>();
+        List<String> errorMessages = new ArrayList<>();
+        resultWrapper.setErrorMessages(errorMessages);
+
+        if (ccInstallment == null || ccInstallment.getId() == null)
+            errorMessages.add("Object is null");
+
+        if (errorMessages.isEmpty()) {
+            try {
+                repository.deleteInstallment(ccInstallment.getId());
             } catch (Exception e) {
                 errorMessages.add(e.getMessage());
             }
@@ -115,39 +179,95 @@ public class CCManagerService {
         return resultWrapper;
     }
 
+    /**
+     * Current balance display
+     * @return BigDecimal
+     */
     public BigDecimal getOutstandingBalance() {
-        return repository.getOutstandingBalance();
+        try {
+            return repository.getOutstandingBalance();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return BigDecimal.ZERO;
     }
 
+    /**
+     *
+     * @return list of all ccTransaction
+     */
     public List<CcTransaction> getAllTransaction() {
-        return repository.getAllTransaction();
+        try {
+            return repository.getTransactions();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return Collections.EMPTY_LIST;
     }
 
+    /**
+     *
+     * @return list of all description
+     */
     public List<String> getAllDescription() {
-        return repository.getAllDescription();
+        try {
+            return repository.getAllDescription();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return Collections.EMPTY_LIST;
     }
 
+    /**
+     *
+     * @return list of all Transaction CREDIT_INST without payment
+     */
     public List<CcTransaction> getAllCreditWithoutPayment() {
-        List<CcTransaction> transactions = new ArrayList<>();
-        for (Long id : repository.getAllCreditWithoutPayment()) {
-            transactions.add(repository.getTransaction(id));
+        try {
+            return repository.getTranCreditsWoPayment();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-
-        return transactions;
+        return Collections.EMPTY_LIST;
     }
 
-    public List<CcInstallment> getAllActiveInstallment() {
-        List<CcInstallment> installments = repository.getAllActiveInstallment();
-
-        // manually setTranCreditsWithPayment() per installment
-        for (CcInstallment installment : installments) {
-            List<CcTransaction> tranCreditsWithPayment = new ArrayList<>();
-            for(Long creditId : repository.getAllPayment(installment.getId())) {
-                tranCreditsWithPayment.add(repository.getTransaction(creditId));
+    /**
+     *
+     * @return list of all active installment
+     */
+    public List<CcInstallment> getInstallments(boolean isActive) {
+        try {
+            List<CcInstallment> installments = new ArrayList<>();
+            if (isActive) {
+                installments.addAll(repository.getActiveInstallments());
+            } else {
+                installments.addAll(repository.getInstallments());
             }
-            installment.setTranCreditsWithPayment(tranCreditsWithPayment);
+
+            for (CcInstallment i : installments) {
+                // compute for total payment made
+                BigDecimal totalPaymentMade = BigDecimal.ZERO;
+                for (CCInstallmentPayment payment : i.getPaidInstallmentPayments()) {
+                    totalPaymentMade = totalPaymentMade.add(payment.getAmount());
+                }
+                i.setTotalPaymentMade(totalPaymentMade);
+
+                // compute for remaining payment
+                i.setRemainingPayment(i.getPrincipalAmount().subtract(totalPaymentMade));
+
+                // compute for remaining months
+                Months d = Months.monthsBetween(LocalDate.fromDateFields(i.getStartDate()), LocalDate.now());
+                i.setRemainingMonths(i.getMonthsToPay() == null ? 0 : (i.getMonthsToPay() - d.getMonths()));
+
+                // set status to 0 if remaining payment is zero
+                i.setActive(i.getRemainingPayment().compareTo(BigDecimal.ZERO));
+            }
+
+            return installments;
+        } catch (Exception e) {
+            e.printStackTrace();
         }
-        return installments;
+        return Collections.EMPTY_LIST;
     }
 
     private List<String> validate(CcTransaction ccTransaction) {

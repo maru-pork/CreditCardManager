@@ -39,71 +39,59 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
         db.close();
     }
 
-    /*
-     simple transaction
-     */
-    public void testAddTranCredit() throws Exception {
+    public void testTransaction() throws Exception {
+        /*
+         "credit" transaction
+          */
         CcTransaction tran = new CcTransaction(new Date(), CreditTransactionType.CREDIT.name(), "credit", new BigDecimal("12.50"));
         long result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount());
-        assertTrue(result!=0);
         assertEqualsTranObject(tran, repository.getTransaction(result));
-    }
 
-    public void testAddTranCreditCharge() throws Exception {
-        CcTransaction tran = new CcTransaction(new Date(), CreditTransactionType.CREDIT_CHARGE.name(), "charge", new BigDecimal("1.00"));
-        long result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount());
-        assertTrue(result!=0);
+        /*
+         "charge" transaction
+         */
+        tran = new CcTransaction(new Date(), CreditTransactionType.CREDIT_CHARGE.name(), "charge", new BigDecimal("1.00"));
+        result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount());
         assertEqualsTranObject(tran, repository.getTransaction(result));
-    }
 
-    public void testAddTranPaymentWithoutInstallment() throws Exception {
-        CcTransaction tran = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("1.00"));
-        long result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount(), null);
-        assertTrue(result!=0);
+        /*
+         "payment without installment" transaction
+          */
+        tran = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("1.00"));
+        result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount(), null);
         assertEqualsTranObject(tran, repository.getTransaction(result));
-    }
 
-    /*
-     transaction with installment
-     */
-    public void testAddTranCreditInst() throws Exception {
-        assertEquals(0, repository.getAllActiveInstallment().size());
-
-        // add INSTALLMENT first
+        /*
+         "credit installment" transaction
+         */
+        assertEquals(0, repository.getActiveInstallments().size());
+        // add installment first
         long id = repository.insertInstallment(new Date(), "Electroworld-SM", new BigDecimal("31990.00"), 12, new BigDecimal("2665.83"), new Date(), new Date(), 1);
-        assertEquals(1, repository.getAllActiveInstallment().size());
+        assertEquals(1, repository.getActiveInstallments().size());
+
         CcInstallment installment = repository.getInstallment(id);
         assertNotNull(installment);
 
-        // insert Transaction CREDIT_INST
-        CcTransaction tran = new CcTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), installment.getDescription(), new BigDecimal("2665.83"), installment);
-        long result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount(), tran.getInstallment().getId());
+        tran = new CcTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), installment.getDescription(), new BigDecimal("2665.83"), installment);
+        result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount(), tran.getInstallment().getId());
         assertEqualsTranObject(tran, repository.getTransaction(result));
-        assertEquals(1, repository.getAllCreditWithoutPayment().size());
-    }
+        assertEquals(1, repository.getTranCreditsWoPayment().size());
 
-    public void testInsertPaymentWithInstallment() throws Exception {
-        // add INSTALLMENT first
-        long installmentId = repository.insertInstallment(new Date(), "Electroworld-SM", new BigDecimal("31990.00"), 12, new BigDecimal("2665.83"), new Date(), new Date(), 1);
-        CcInstallment installment = repository.getInstallment(installmentId);
-        assertNotNull(installment);
+        /*
+         "payment with installment" transaction
+         */
+        CcTransaction creditWoPayment = repository.getTranCreditsWoPayment().get(0);
+        assertEquals(0, repository.getInstallmentPayments(installment.getId()).size());
 
-        // insert Transaction CREDIT_INST
-        long id = repository.insertTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment", new BigDecimal("10.00"), installment.getId());
-        assertNotNull(repository.getTransaction(id));
-        assertEquals(1, repository.getAllCreditWithoutPayment().size());
-        assertEquals(0, repository.getAllPayment(installmentId).size());
-
-        // insert PAYMENT
-        CcTransaction trPayment = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("1.00"));
-        long result = repository.insertTransaction(trPayment.getTranDate(), trPayment.getType(), trPayment.getDescription(), trPayment.getAmount(), new String[]{String.valueOf(id)});
-        assertEqualsTranObject(trPayment, repository.getTransaction(result));
-        assertEquals(0, repository.getAllCreditWithoutPayment().size());
-        assertEquals(1, repository.getAllPayment(installmentId).size());
+        tran = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("1.00"));
+        result = repository.insertTransaction(tran.getTranDate(), tran.getType(), tran.getDescription(), tran.getAmount(), new String[]{String.valueOf(creditWoPayment.getId())});
+        assertEqualsTranObject(tran, repository.getTransaction(result));
+        assertEquals(0, repository.getTranCreditsWoPayment().size());
+        assertEquals(1, repository.getInstallmentPayments(installment.getId()).size());
     }
 
     public void testInsertPaymentWithMultipleInstallment() throws Exception {
-        // add INSTALLMENT first
+        // add installments first
         long installmentId1 = repository.insertInstallment(new Date(), "Electroworld-SM1", new BigDecimal("31991.00"), 12, new BigDecimal("2661.83"), new Date(), new Date(), 1);
         CcInstallment installment1 = repository.getInstallment(installmentId1);
         assertNotNull(installment1);
@@ -120,30 +108,31 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
         long id1 = repository.insertTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment1", new BigDecimal("10.00"), installment1.getId());
         long id2 = repository.insertTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment2", new BigDecimal("20.00"), installment2.getId());
         long id3 = repository.insertTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment3", new BigDecimal("30.00"), installment3.getId());
-        assertEquals(3, repository.getAllCreditWithoutPayment().size());
-        assertEquals(0, repository.getAllPayment(installmentId1).size());
-        assertEquals(0, repository.getAllPayment(installmentId2).size());
-        assertEquals(0, repository.getAllPayment(installmentId3).size());
+        assertEquals(3, repository.getTranCreditsWoPayment().size());
+        assertEquals(0, repository.getInstallmentPayments(installmentId1).size());
+        assertEquals(0, repository.getInstallmentPayments(installmentId2).size());
+        assertEquals(0, repository.getInstallmentPayments(installmentId3).size());
 
         // pay only for installment1 and installment2
         CcTransaction trPayment = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("100.00"));
         repository.insertTransaction(trPayment.getTranDate(), trPayment.getType(), trPayment.getDescription(), trPayment.getAmount(), new String[]{String.valueOf(id1), String.valueOf(id2)});
-        assertEquals(1, repository.getAllCreditWithoutPayment().size());
-        assertEquals(1, repository.getAllPayment(installmentId1).size());
-        assertEquals(1, repository.getAllPayment(installmentId2).size());
-        assertEquals(0, repository.getAllPayment(installmentId3).size());
+        assertEquals(1, repository.getTranCreditsWoPayment().size());
+        assertEquals(1, repository.getInstallmentPayments(installmentId1).size());
+        assertEquals(1, repository.getInstallmentPayments(installmentId2).size());
+        assertEquals(0, repository.getInstallmentPayments(installmentId3).size());
 
         // pay for installment3
         trPayment = new CcTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment", new BigDecimal("500.00"));
         repository.insertTransaction(trPayment.getTranDate(), trPayment.getType(), trPayment.getDescription(), trPayment.getAmount(), new String[]{String.valueOf(id3)});
-        assertEquals(0, repository.getAllCreditWithoutPayment().size());
-        assertEquals(1, repository.getAllPayment(installmentId1).size());
-        assertEquals(1, repository.getAllPayment(installmentId2).size());
-        assertEquals(1, repository.getAllPayment(installmentId3).size());
+        assertEquals(0, repository.getTranCreditsWoPayment().size());
+        assertEquals(1, repository.getInstallmentPayments(installmentId1).size());
+        assertEquals(1, repository.getInstallmentPayments(installmentId2).size());
+        assertEquals(1, repository.getInstallmentPayments(installmentId3).size());
     }
 
     public void testInsertInstallment() throws Exception {
         CcInstallment inst = new CcInstallment(new Date(), "Electroworld-SM", new BigDecimal("31990.00"), 12, new BigDecimal("2665.83"), new Date(), new Date(), 1);
+
         long result = repository.insertInstallment(inst.getDate(), inst.getDescription(), inst.getPrincipalAmount(),
                 inst.getMonthsToPay(), inst.getMonthlyAmortization(), inst.getStartDate(), inst.getEndDate(), inst.getActive());
         assertTrue(result!=0);
@@ -159,6 +148,27 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
         assertEquals(inst.getEndDate(), actual.getEndDate());
         assertEquals(inst.getActive(), actual.getActive());
         assertEquals(inst.getActive() == 1, actual.isActive());
+    }
+
+    public void testDeleteInstallment() throws Exception {
+        long installmentId = repository.insertInstallment(new Date(), "Electroworld-SM1", new BigDecimal("31991.00"), 12, new BigDecimal("2661.83"), new Date(), new Date(), 1);
+        long idCreditInst = repository.insertTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment", new BigDecimal("130"), installmentId);
+        long idPaymentInst = repository.insertTransaction(new Date(), CreditTransactionType.PAYMENT.name(), "payment with installment", new BigDecimal("130"), new String[]{String.valueOf(idCreditInst)});
+
+        assertNotNull(repository.getInstallment(installmentId));
+        assertEquals(1, repository.getInstallmentPayments(installmentId).size());
+
+        repository.deleteInstallment(installmentId);
+        assertNull(repository.getInstallment(installmentId));
+        assertEquals(0,repository.getInstallmentPayments(installmentId).size());
+
+        assertNotNull(repository.getTransaction(idCreditInst));
+        assertNotNull(repository.getTransaction(idPaymentInst));
+        repository.deleteTransaction(idCreditInst, CreditTransactionType.CREDIT_INST.name());
+        repository.deleteTransaction(idPaymentInst, CreditTransactionType.PAYMENT.name());
+        assertNull(repository.getTransaction(idCreditInst));
+        assertNull(repository.getTransaction(idPaymentInst));
+
     }
 
     public void testDeleteTransaction() throws Exception {
@@ -198,7 +208,7 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
         try {
             repository.deleteTransaction(idCreditInst, CreditTransactionType.CREDIT_INST.name());
         } catch (Exception e) {
-            assertEquals("Cannot delete given id. Payment column has value.", e.getMessage());
+            assertEquals("Current transaction is still referenced to other Payment transaction.", e.getMessage());
         }
 
         assertEquals(1, repository.getPaymentInstallment(idPaymentInst,CreditTransactionType.PAYMENT.name()).size());
@@ -223,7 +233,7 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
     /*
     retrieving transactions
      */
-    public void testGetAllSimpleTransaction() throws Exception {
+    public void testGetTransactions() throws Exception {
         Map<CreditTransactionType, CcTransaction> transactionMap = new HashMap<>();
         transactionMap.put(CreditTransactionType.CREDIT, new CcTransaction(new Date(), CreditTransactionType.CREDIT.name(), "credit", new BigDecimal("12.50")));
         transactionMap.put(CreditTransactionType.CREDIT_INST, new CcTransaction(new Date(), CreditTransactionType.CREDIT_INST.name(), "credit installment", new BigDecimal("10.00"), new CcInstallment(1L)));
@@ -241,7 +251,7 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
             }
         }
 
-        List<CcTransaction> transactionList = repository.getAllTransaction();
+        List<CcTransaction> transactionList = repository.getTransactions();
         for (CcTransaction tran : transactionList) {
             assertEqualsTranObject(transactionMap.get(CreditTransactionType.valueOf(tran.getType())), tran);
         }
@@ -298,7 +308,7 @@ public class CCManagerRepositoryTest extends AndroidTestCase {
         assertEqualsOutstandingBalance(new BigDecimal("-1.00"));
     }
 
-    private void assertEqualsOutstandingBalance(BigDecimal expectedBalance) {
+    private void assertEqualsOutstandingBalance(BigDecimal expectedBalance) throws Exception {
         BigDecimal totalCredit = repository.sum(CreditTransactionType.getCredit());
         BigDecimal totalPayment = repository.sum(CreditTransactionType.getPayment());
 

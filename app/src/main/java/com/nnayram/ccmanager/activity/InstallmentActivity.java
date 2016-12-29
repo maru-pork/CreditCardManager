@@ -1,7 +1,9 @@
 package com.nnayram.ccmanager.activity;
 
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
 import android.text.format.DateFormat;
 import android.view.Gravity;
 import android.view.View;
@@ -18,8 +20,8 @@ import com.nnayram.ccmanager.R;
 import com.nnayram.ccmanager.core.DateUtil;
 import com.nnayram.ccmanager.core.ResultWrapper;
 import com.nnayram.ccmanager.db.DBHelper;
+import com.nnayram.ccmanager.model.CCInstallmentPayment;
 import com.nnayram.ccmanager.model.CcInstallment;
-import com.nnayram.ccmanager.model.CcTransaction;
 import com.nnayram.ccmanager.service.CCManagerService;
 import com.nnayram.ccmanager.view.AddInstallmentDialog;
 
@@ -39,6 +41,7 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
     private TextView tvPrincipalAmount;
     private TextView tvMonthlyAmortization;
     private TextView tvDuration;
+    private TextView tvAmountPaid;
     private TextView tvRemainingBalance;
 
     private TableLayout tblPayment;
@@ -62,6 +65,7 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
         tvPrincipalAmount = (TextView) findViewById(R.id.tv_inst_principal_amt);
         tvMonthlyAmortization = (TextView) findViewById(R.id.tv_inst_mo_amo);
         tvDuration = (TextView) findViewById(R.id.tv_inst_duration);
+        tvAmountPaid = (TextView) findViewById(R.id.tv_inst_amount_paid);
         tvRemainingBalance = (TextView) findViewById(R.id.tv_inst_remaining_bal);
 
         tblPayment = (TableLayout) findViewById(R.id.tbl_inst_payment);
@@ -78,7 +82,7 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
     }
 
     private void refreshInstallmentAdapter() {
-        spInstallment.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, service.getAllActiveInstallment()));
+        spInstallment.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, service.getInstallments(false)));
     }
 
     @Override
@@ -104,10 +108,21 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
 
                 } else
                 if ("DELETE".equals(spOperation.getSelectedItem())) {
-
-
-                } else
-                if ("EXPORT".equals(spOperation.getSelectedItem())) {
+                    AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(InstallmentActivity.this);
+                    alertDialogBuilder.setMessage("Are you sure you want to remove installment?");
+                    alertDialogBuilder.setCancelable(false);
+                    alertDialogBuilder.setPositiveButton("Remove", new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            ResultWrapper<CcInstallment> resultWrapper = service.deleteInstallment((CcInstallment) spInstallment.getSelectedItem());
+                            if(validateResultWrapper(resultWrapper)) {
+                                Toast.makeText(InstallmentActivity.this, "Successfully deleted installment.", Toast.LENGTH_LONG).show();
+                            }
+                            refreshInstallmentAdapter();
+                        }
+                    });
+                    alertDialogBuilder.setNegativeButton("Close", null);
+                    alertDialogBuilder.show();
 
                 }
                 break;
@@ -126,14 +141,15 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
                         + " [" + String.valueOf(installment.getMonthsToPay()) + " mos]");
                 tvDuration.setText(DateFormat.format(DateUtil.DATE_PATTERN, installment.getStartDate())
                         + " to " + DateFormat.format(DateUtil.DATE_PATTERN, installment.getEndDate()));
+                tvAmountPaid.setText(installment.getFormattedTotalPaymentMade());
                 tvRemainingBalance.setText(installment.getFormattedRemainingPayment()
                         + " [" + installment.getRemainingMonths() + " mos]");
 
                 tblPayment.removeAllViews();
                 tblPayment.addView(trTranHeader);
 
-                List<CcTransaction> creditsWithPayment = installment.getTranCreditsWithPaymentForEdit();
-                for (int x=0; x<creditsWithPayment.size(); x++) {
+                List<CCInstallmentPayment> payments = installment.getPaidInstallmentPayments();
+                for (int x=0; x<payments.size(); x++) {
                     trTranRow = new TableRow(this);
                     trTranRow.setLayoutParams(new TableLayout.LayoutParams(TableLayout.LayoutParams.WRAP_CONTENT, TableLayout.LayoutParams.WRAP_CONTENT));
 
@@ -143,18 +159,16 @@ public class InstallmentActivity extends BaseActivity implements View.OnClickLis
                     tvTranRow.setText(String.valueOf(x+1));
                     trTranRow.addView(tvTranRow);
 
-                    // TODO should be date from Payment
                     tvTranRow = new TextView(this);
                     tvTranRow.setLayoutParams(tvTranRowID.getLayoutParams());
                     tvTranRow.setGravity(Gravity.CENTER_HORIZONTAL);
-                    tvTranRow.setText(DateFormat.format(DateUtil.DATE_PATTERN, creditsWithPayment.get(x).getTranDate()));
+                    tvTranRow.setText(DateFormat.format(DateUtil.DATE_PATTERN, payments.get(x).getDate()));
                     trTranRow.addView(tvTranRow);
 
-                    // TODO should be amount from Credit
                     tvTranRow = new TextView(this);
                     tvTranRow.setLayoutParams(tvTranRowID.getLayoutParams());
                     tvTranRow.setGravity(Gravity.CENTER_HORIZONTAL);
-                    tvTranRow.setText(creditsWithPayment.get(x).getFormattedAmount());
+                    tvTranRow.setText(payments.get(x).getFormattedAmount());
                     trTranRow.addView(tvTranRow);
 
                     tblPayment.addView(trTranRow);

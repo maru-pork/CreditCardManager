@@ -129,6 +129,30 @@
                     android:fontFamily="sans-serif-medium"/>
             </TableRow>
             <TableRow>
+                <!-- Total Amount Paid -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/cc_tran_row_height"
+                    android:layout_weight="1"
+                    android:gravity="left"
+                    android:paddingRight="10dp"
+                    android:text="Total Amount Paid"
+                    android:typeface="normal"
+                    android:textStyle="bold|italic"
+                    android:textColor="@android:color/black"
+                    android:fontFamily="sans-serif-medium"/>
+                <TextView
+                    android:id="@+id/tv_inst_amount_paid"
+                    android:layout_width="wrap_content"
+                    android:layout_height="@dimen/cc_tran_row_height"
+                    android:layout_weight="1"
+                    android:gravity="center_horizontal"
+                    android:paddingRight="10dp"
+                    android:typeface="normal"
+                    android:textColor="@android:color/black"
+                    android:fontFamily="sans-serif-medium"/>
+            </TableRow>
+            <TableRow>
                 <!-- Remaining Balance -->
                 <TextView
                     android:layout_width="wrap_content"

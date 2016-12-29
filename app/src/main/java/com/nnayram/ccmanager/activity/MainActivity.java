@@ -206,7 +206,7 @@ public class MainActivity extends BaseActivity implements View.OnClickListener {
 
                     @Override
                     public List<CcInstallment> getAllInstallment() {
-                        return service.getAllActiveInstallment();
+                        return service.getInstallments(true);
                     }
                 }.show();
                 break;

@@ -9,6 +9,7 @@ import android.database.sqlite.SQLiteQueryBuilder;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.nnayram.ccmanager.model.CCInstallmentPayment;
 import com.nnayram.ccmanager.model.CcInstallment;
 import com.nnayram.ccmanager.model.CcTransaction;
 import com.nnayram.ccmanager.model.CreditTransactionType;
@@ -23,11 +24,12 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
+import static com.nnayram.ccmanager.core.DateUtil.getDateIfExists;
 import static com.nnayram.ccmanager.core.DateUtil.getDateOrThrow;
 import static com.nnayram.ccmanager.core.NumberUtil.getBigDecimalIfExists;
 import static com.nnayram.ccmanager.core.NumberUtil.getBigDecimalOrThrow;
 import static com.nnayram.ccmanager.db.DBContract.Installment;
-import static com.nnayram.ccmanager.db.DBContract.PaymentInstallment;
+import static com.nnayram.ccmanager.db.DBContract.InstallmentPayment;
 import static com.nnayram.ccmanager.db.DBContract.Transaction;
 
 /**
@@ -72,8 +74,7 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
                 Transaction.COLUMN_DATE + " INTEGER NOT NULL," +
                 Transaction.COLUMN_TYPE + " TEXT NOT NULL," +
                 Transaction.COLUMN_DESC + " TEXT NOT NULL," +
-                Transaction.COLUMN_AMOUNT + " REAL NOT NULL," +
-                Transaction.COLUMN_INSTALLMENT + " INTEGER);");
+                Transaction.COLUMN_AMOUNT + " REAL NOT NULL);");
         db.execSQL("CREATE TABLE " + Installment.TABLE_NAME + " (" +
                 Installment._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
                 Installment.COLUMN_DATE + " INTEGER NOT NULL," +
@@ -84,10 +85,13 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
                 Installment.COLUMN_START_DATE + " INTEGER NOT NULL," +
                 Installment.COLUMN_END_DATE + " INTEGER NOT NULL," +
                 Installment.COLUMN_ACTIVE + " INTEGER NOT NULL);");
-        db.execSQL("CREATE TABLE " + PaymentInstallment.TABLE_NAME + " ("
-                + PaymentInstallment.COLUMN_INSTALLMENT + " INTEGER NOT NULL,"
-                + PaymentInstallment.COLUMN_TRAN_CREDIT_INST + " INTEGER NOT NULL,"
-                + PaymentInstallment.COLUMN_TRAN_PAYMENT + " INTEGER);");
+        db.execSQL("CREATE TABLE " + InstallmentPayment.TABLE_NAME + " (" +
+                InstallmentPayment._ID + " INTEGER PRIMARY KEY AUTOINCREMENT," +
+                InstallmentPayment.COLUMN_PAYMENT_AMOUNT + " REAL NOT NULL," +
+                InstallmentPayment.COLUMN_PAYMENT_DATE + " INTEGER," +
+                InstallmentPayment.COLUMN_INSTALLMENT + " INTEGER NOT NULL," +
+                InstallmentPayment.COLUMN_TRAN_CREDIT_INST + " INTEGER NOT NULL," +
+                InstallmentPayment.COLUMN_TRAN_PAYMENT + " INTEGER);");
     }
 
     @Override
@@ -96,7 +100,7 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         // drop table if upgraded
         db.execSQL("DROP TABLE IF EXISTS " + Transaction.TABLE_NAME);
         db.execSQL("DROP TABLE IF EXISTS " + Installment.TABLE_NAME);
-        db.execSQL("DROP TABLE IF EXISTS " + PaymentInstallment.TABLE_NAME);
+        db.execSQL("DROP TABLE IF EXISTS " + InstallmentPayment.TABLE_NAME);
         onCreate(db);
     }
 
@@ -140,15 +144,15 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
             cv.put(Transaction.COLUMN_TYPE, type);
             cv.put(Transaction.COLUMN_DESC, description);
             cv.put(Transaction.COLUMN_AMOUNT, amount.toPlainString());
-            cv.put(Transaction.COLUMN_INSTALLMENT, installmentId);
             result = db.insert(Transaction.TABLE_NAME, null, cv);
 
             cv = new ContentValues();
-            cv.put(PaymentInstallment.COLUMN_INSTALLMENT, installmentId);
-            cv.put(PaymentInstallment.COLUMN_TRAN_CREDIT_INST, result);
-            long resultId = db.insert(PaymentInstallment.TABLE_NAME, null, cv);
+            cv.put(InstallmentPayment.COLUMN_PAYMENT_AMOUNT, amount.toPlainString());
+            cv.put(InstallmentPayment.COLUMN_INSTALLMENT, installmentId);
+            cv.put(InstallmentPayment.COLUMN_TRAN_CREDIT_INST, result);
+            long resultId = db.insert(InstallmentPayment.TABLE_NAME, null, cv);
 
-            if (resultId != 0) db.setTransactionSuccessful();
+            if (result != 0 && resultId != 0) db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
             close(db);
@@ -175,18 +179,19 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
             cv.put(Transaction.COLUMN_AMOUNT, amount.toPlainString());
             result = db.insert(Transaction.TABLE_NAME, null, cv);
 
-            // update PaymentInstallment
-            long updatedRows = 1;
+            // update InstallmentPayment
+            long updatedRowsI = 1;
             if (!ArrayUtils.isEmpty(tranCreditIds)) {
                 cv = new ContentValues();
-                cv.put(PaymentInstallment.COLUMN_TRAN_PAYMENT, result);
-                String whereClause = PaymentInstallment.COLUMN_TRAN_CREDIT_INST + " IN (" + TextUtils.join(",", Collections.nCopies(tranCreditIds.length, "?"))  + ")";
-                updatedRows = db.update(PaymentInstallment.TABLE_NAME, cv, whereClause, tranCreditIds);
+                cv.put(InstallmentPayment.COLUMN_PAYMENT_DATE, date.getTime());
+                cv.put(InstallmentPayment.COLUMN_TRAN_PAYMENT, result);
+                String whereClause = InstallmentPayment.COLUMN_TRAN_CREDIT_INST + " IN (" + TextUtils.join(",", Collections.nCopies(tranCreditIds.length, "?"))  + ")";
+                updatedRowsI = db.update(InstallmentPayment.TABLE_NAME, cv, whereClause, tranCreditIds);
             }
 
-            // update Installment
 
-            if (updatedRows!=0) db.setTransactionSuccessful();
+            if (result !=0 && updatedRowsI!=0)
+                db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
             close(db);
@@ -207,18 +212,22 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
             if (CreditTransactionType.PAYMENT.name().equals(type)) {
                 // if PAYMENT: Update PaymentInstallment. Since the payment transaction was just deleted, set payment column to null.
                 ContentValues cv = new ContentValues();
-                cv.putNull(PaymentInstallment.COLUMN_TRAN_PAYMENT);
+                cv.putNull(InstallmentPayment.COLUMN_TRAN_PAYMENT);
 
-                String whereClause = PaymentInstallment.COLUMN_TRAN_PAYMENT+"=?";
-                db.update(PaymentInstallment.TABLE_NAME, cv, whereClause, whereArgs);
+                String whereClause = InstallmentPayment.COLUMN_TRAN_PAYMENT+"=?";
+                db.update(InstallmentPayment.TABLE_NAME, cv, whereClause, whereArgs);
 
             } else if(CreditTransactionType.CREDIT_INST.name().equals(type)) {
-                // if CREDIT_INST: Delete PaymentInstallment where payment column has no value or else deletion not allowed.
-                String whereClause = PaymentInstallment.COLUMN_TRAN_CREDIT_INST + "=? AND " + PaymentInstallment.COLUMN_TRAN_PAYMENT + " IS NULL";
-                long deletedRows = db.delete(PaymentInstallment.TABLE_NAME, whereClause, whereArgs);
+                // throw error only if id is existing on InstallmentPayment tbl
+                Cursor cursor = db.query(InstallmentPayment.TABLE_NAME, null, InstallmentPayment.COLUMN_TRAN_CREDIT_INST+"=?", new String[]{String.valueOf(id)}, null, null, null);
+                if (cursor.getCount() != 0) {
+                    // if CREDIT_INST: Delete PaymentInstallment where payment column has no value or else deletion not allowed.
+                    String whereClause = InstallmentPayment.COLUMN_TRAN_CREDIT_INST + "=? AND " + InstallmentPayment.COLUMN_TRAN_PAYMENT + " IS NULL";
+                    long deletedRows = db.delete(InstallmentPayment.TABLE_NAME, whereClause, whereArgs);
 
-                if (deletedRows == 0)
-                    throw new IllegalArgumentException("Current transaction is still referenced to other Payment transaction.");
+                    if (deletedRows == 0)
+                        throw new IllegalArgumentException("Current transaction is still referenced to other Payment transaction.");
+                }
             }
             db.setTransactionSuccessful();
         } finally {
@@ -252,14 +261,59 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
     }
 
     @Override
-    public List<CcTransaction> getAllTransaction() {
+    public long updateInstallment(Long id, Integer active) {
+        SQLiteDatabase db = null;
+        long result = 0;
+        try {
+            db = this.getWritableDatabase();
+            ContentValues cv = new ContentValues();
+            cv.put(Installment.COLUMN_ACTIVE, active);
+            db.update(Installment.TABLE_NAME, cv, Installment._ID+"=?", new String[]{String.valueOf(id)});
+        } finally {
+            close(db);
+        }
+        return result;
+    }
+
+    @Override
+    public long deleteInstallment(Long id) {
+        SQLiteDatabase db = null;
+        long result = 0;
+        try {
+            db = this.getWritableDatabase();
+            db.beginTransaction();
+            String[] whereArgs = new String[]{String.valueOf(id)};
+            result = db.delete(Installment.TABLE_NAME, Installment._ID+"=?", whereArgs);
+
+            // delete reference to InstallmentPayment tbl
+            db.delete(InstallmentPayment.TABLE_NAME, InstallmentPayment.COLUMN_INSTALLMENT+"=?", whereArgs);
+
+            if (result != 0) {
+                db.setTransactionSuccessful();
+            }
+        } finally {
+            db.endTransaction();
+            close(db);
+        }
+        return result;
+    }
+
+    @Override
+    public List<CcTransaction> getTransactions(String... ids) {
         SQLiteDatabase db = null;
         Cursor cursor = null;
         List<CcTransaction> transactions = new ArrayList<>();
         try {
             db = this.getReadableDatabase();
             String orderBy = Transaction._ID + " DESC";
-            cursor = db.query(Transaction.TABLE_NAME, null, null, null, null, null, orderBy);
+
+            if(ArrayUtils.isEmpty(ids)){
+                cursor = db.query(Transaction.TABLE_NAME, null, null, null, null, null, orderBy);
+            } else {
+                String selection = Transaction._ID + " IN (" + TextUtils.join(",", Collections.nCopies(ids.length, "?"))  + ")";
+                cursor = db.query(Transaction.TABLE_NAME, null, selection, ids, null, null, null);
+            }
+
             while (cursor.moveToNext()) {
                 transactions.add(constructTransactionFrCursor(cursor));
             }
@@ -270,7 +324,7 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
     }
 
     @Override
-    public List<CcInstallment> getAllInstallment() {
+    public List<CcInstallment> getInstallments() {
         SQLiteDatabase db = null;
         Cursor cursor = null;
         List<CcInstallment> installments = new ArrayList<>();
@@ -284,11 +338,16 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         } finally {
             close(db, cursor);
         }
+
+        // TODO change to inner join
+        for (CcInstallment installment : installments) {
+            installment.setPaidInstallmentPayments(getInstallmentPayments(installment.getId()));
+        }
         return installments;
     }
 
     @Override
-    public List<CcInstallment> getAllActiveInstallment() {
+    public List<CcInstallment> getActiveInstallments() {
         SQLiteDatabase db = null;
         Cursor cursor = null;
         List<CcInstallment> installments = new ArrayList<>();
@@ -304,46 +363,63 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         } finally {
             close(db, cursor);
         }
+
+        // TODO change to inner join
+        for (CcInstallment installment : installments) {
+            installment.setPaidInstallmentPayments(getInstallmentPayments(installment.getId()));
+        }
         return installments;
     }
 
     @Override
-    public List<Long> getAllCreditWithoutPayment() {
+    public List<CcTransaction> getTranCreditsWoPayment() {
         SQLiteDatabase db = null;
         Cursor cursor = null;
-        List<Long> transactions = new ArrayList<>();
+        List<CcTransaction> ccTransactions = new ArrayList<>();
+        List<String> ids = new ArrayList<>();
         try {
             db = this.getReadableDatabase();
-
-            String selection = PaymentInstallment.COLUMN_TRAN_PAYMENT+" IS NULL";
-            cursor = db.query(PaymentInstallment.TABLE_NAME, null, selection, null, null, null, null);
+            String selection = InstallmentPayment.COLUMN_TRAN_PAYMENT+" IS NULL";
+            cursor = db.query(InstallmentPayment.TABLE_NAME, null, selection, null, null, null, null);
             while (cursor.moveToNext()) {
-                transactions.add(cursor.getLong(cursor.getColumnIndex(PaymentInstallment.COLUMN_TRAN_CREDIT_INST)));
+                ids.add(String.valueOf(
+                        cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_TRAN_CREDIT_INST))));
             }
         } finally {
             close(db, cursor);
         }
-        return transactions;
+
+        // if param is empty getTransactions() return all transaction, so setting param to 0 if no ids are returned
+        String[] idsArr = ids.isEmpty() ? new String[]{"0"} : ids.toArray(new String[ids.size()]);
+        ccTransactions.addAll(getTransactions(idsArr));
+        return ccTransactions;
     }
 
     @Override
-    public List<Long> getAllPayment(Long installmentId) {
+    public List<CCInstallmentPayment> getInstallmentPayments(Long id) {
         SQLiteDatabase db = null;
         Cursor cursor = null;
-        List<Long> transactions = new ArrayList<>();
+        List<CCInstallmentPayment> payments = new ArrayList<>();
         try {
             db = this.getReadableDatabase();
 
-            String selection = PaymentInstallment.COLUMN_INSTALLMENT + "=? AND " + PaymentInstallment.COLUMN_TRAN_PAYMENT + " IS NOT NULL";
-            String[] selectionArgs = new String[]{String.valueOf(installmentId)};
-            cursor = db.query(PaymentInstallment.TABLE_NAME, null, selection, selectionArgs, null, null, null);
+            String selection = InstallmentPayment.COLUMN_INSTALLMENT + "=? AND " + InstallmentPayment.COLUMN_TRAN_PAYMENT + " IS NOT NULL";
+            String[] selectionArgs = new String[]{String.valueOf(id)};
+            cursor = db.query(InstallmentPayment.TABLE_NAME, null, selection, selectionArgs, null, null, null);
             while (cursor.moveToNext()) {
-                transactions.add(cursor.getLong(cursor.getColumnIndex(PaymentInstallment.COLUMN_TRAN_CREDIT_INST)));
+                payments.add(constructPaymentFrCursor(cursor));
             }
         } finally {
             close(db, cursor);
         }
-        return transactions;
+
+        // TODO change to inner join
+        /*for (CCInstallmentPayment payment : payments) {
+            payment.setInstallment(getInstallment(payment.getInstallment().getId()));
+            payment.setTranCredit(getTransaction(payment.getTranCredit().getId()));
+            payment.setTranPayment(getTransaction(payment.getTranPayment().getId()));
+        }*/
+        return payments;
     }
 
     @Override
@@ -362,12 +438,12 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
             if (!Arrays.asList(new String[]{CreditTransactionType.CREDIT_INST.name(), CreditTransactionType.PAYMENT.name()}).contains(type))
                 throw new IllegalArgumentException("Invalid type");
 
-            String selectionColumn = CreditTransactionType.CREDIT_INST.name().equals(type) ? PaymentInstallment.COLUMN_TRAN_CREDIT_INST :
-                    CreditTransactionType.PAYMENT.name().equals(type) ? PaymentInstallment.COLUMN_TRAN_PAYMENT : "";
+            String selectionColumn = CreditTransactionType.CREDIT_INST.name().equals(type) ? InstallmentPayment.COLUMN_TRAN_CREDIT_INST :
+                    CreditTransactionType.PAYMENT.name().equals(type) ? InstallmentPayment.COLUMN_TRAN_PAYMENT : "";
             String[] selectionArgs = new String[]{String.valueOf(id)};
-            cursor = db.query(PaymentInstallment.TABLE_NAME, null, selectionColumn+"=?", selectionArgs, null, null, null);
+            cursor = db.query(InstallmentPayment.TABLE_NAME, null, selectionColumn+"=?", selectionArgs, null, null, null);
             while (cursor.moveToNext()) {
-                transactions.add(cursor.getLong(cursor.getColumnIndex(PaymentInstallment.COLUMN_INSTALLMENT)));
+                transactions.add(cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_INSTALLMENT)));
             }
         } finally {
             close(db, cursor);
@@ -410,6 +486,11 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         } finally {
             close(db, cursor);
         }
+
+        // TODO change to inner join
+        if (installment != null) {
+            installment.setPaidInstallmentPayments(getInstallmentPayments(installment.getId()));
+        }
         return installment;
     }
 
@@ -442,15 +523,15 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         try {
             db = this.getReadableDatabase();
 
-            String asTotalCredit = "totalCredit";
-            String asTotalPayment = "totalPayment";
+            String totalCredit = "totalCredit";
+            String totalPayment = "totalPayment";
 
-            String queryTotalCredit = "SELECT COALESCE(SUM("+ Transaction.COLUMN_AMOUNT +"), 0) as " + asTotalCredit + " FROM " + Transaction.TABLE_NAME +
+            String queryTotalCredit = "SELECT COALESCE(SUM("+ Transaction.COLUMN_AMOUNT +"), 0) as " + totalCredit + " FROM " + Transaction.TABLE_NAME +
                     " WHERE " + Transaction.COLUMN_TYPE + " IN('" + TextUtils.join("','", CreditTransactionType.getCredit()) + "')";
-            String queryTotalPayment = "SELECT COALESCE(SUM("+ Transaction.COLUMN_AMOUNT +"), 0) as " + asTotalPayment + " FROM " + Transaction.TABLE_NAME +
+            String queryTotalPayment = "SELECT COALESCE(SUM("+ Transaction.COLUMN_AMOUNT +"), 0) as " + totalPayment + " FROM " + Transaction.TABLE_NAME +
                     " WHERE " + Transaction.COLUMN_TYPE + " IN('" + TextUtils.join("','", CreditTransactionType.getPayment())+ "')";
 
-            String col = asTotalCredit + " - " + asTotalPayment;
+            String col = totalCredit + " - " + totalPayment;
             String[] cols = new String[]{col};
             String from = "(" + queryTotalCredit + ") c,(" + queryTotalPayment + ") p";
             String query = SQLiteQueryBuilder.buildQueryString(false, from, cols, null, null, null, null, null);
@@ -495,7 +576,6 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         transaction.setType(cursor.getString(cursor.getColumnIndex(Transaction.COLUMN_TYPE)));
         transaction.setDescription(cursor.getString(cursor.getColumnIndex(Transaction.COLUMN_DESC)));
         transaction.setAmount(getBigDecimalOrThrow(cursor.getFloat(cursor.getColumnIndex(Transaction.COLUMN_AMOUNT))));
-        transaction.setInstallment(cursor.getLong(cursor.getColumnIndex(Transaction.COLUMN_INSTALLMENT)));
         return transaction;
     }
 
@@ -511,6 +591,19 @@ public class DBHelper extends SQLiteOpenHelper implements CcManagerRepository {
         installment.setEndDate(getDateOrThrow(cursor.getLong(cursor.getColumnIndex(Installment.COLUMN_END_DATE))));
         installment.setActive(cursor.getInt(cursor.getColumnIndex(Installment.COLUMN_ACTIVE)));
         return installment;
+    }
+
+    private CCInstallmentPayment constructPaymentFrCursor(Cursor cursor) {
+        CCInstallmentPayment payment = new CCInstallmentPayment();
+        payment.setId(cursor.getLong(cursor.getColumnIndex(InstallmentPayment._ID)));
+        payment.setAmount(getBigDecimalOrThrow(cursor.getFloat(cursor.getColumnIndex(InstallmentPayment.COLUMN_PAYMENT_AMOUNT))));
+        payment.setDate(getDateIfExists(cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_PAYMENT_DATE))));
+        payment.setInstallment(new CcInstallment(cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_INSTALLMENT))));
+        payment.setTranCredit(new CcTransaction(cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_TRAN_CREDIT_INST))));
+
+        Long paymentId = cursor.getLong(cursor.getColumnIndex(InstallmentPayment.COLUMN_TRAN_PAYMENT));
+        payment.setTranPayment(new CcTransaction(paymentId == null ? 0 : paymentId));
+        return payment;
     }
 
     /**

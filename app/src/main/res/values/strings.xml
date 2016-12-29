@@ -63,6 +63,5 @@
     <string-array name="arr_cc_operation">
         <item>ADD</item>
         <item>DELETE</item>
-        <item>EXPORT</item>
     </string-array>
 </resources>

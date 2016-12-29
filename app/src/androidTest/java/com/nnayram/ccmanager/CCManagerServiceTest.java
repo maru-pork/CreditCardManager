@@ -38,11 +38,54 @@ public class CCManagerServiceTest extends AndroidTestCase {
         // TODO
     }
 
-    public void testAddInstallment() {
+    public void testInstallment() {
+        // for single installment
         service.addInstallment(new CcInstallment(
-                new Date(), "laptop", new BigDecimal("31990"), 12, new BigDecimal("2665.833333333333"), new Date(), new Date(), 1)).getEntity();
+                new Date(), "laptop", new BigDecimal("31990"), 12, new BigDecimal("2665"), new Date(), new Date(), 1));
+        List<CcInstallment> activeInstallments = service.getInstallments(true);
+        assertEquals(1, activeInstallments.size());
 
+        service.addTransaction(constructTransaction("21-Apr-16", "INSTALLMENT", "laptop", "1333", activeInstallments.get(0)));
+        service.addTransaction(constructTransaction("22-Apr-16", "PAYMENT","payment", "1333", service.getAllCreditWithoutPayment().get(0)));
+        assertInstallment(new BigDecimal("1333.00"), new BigDecimal("30657.00"), true);
 
+        service.addTransaction(constructTransaction("23-Apr-16", "INSTALLMENT", "laptop", "15000", activeInstallments.get(0)));
+        service.addTransaction(constructTransaction("24-Apr-16", "PAYMENT","payment", "15000", service.getAllCreditWithoutPayment().get(0)));
+        assertInstallment(new BigDecimal("16333.00"), new BigDecimal("15657.00"), true);
+
+        service.addTransaction(constructTransaction("25-Apr-16", "INSTALLMENT", "laptop", "15657", activeInstallments.get(0)));
+        service.addTransaction(constructTransaction("26-Apr-16", "PAYMENT","payment", "15657", service.getAllCreditWithoutPayment().get(0)));
+        assertInstallment(new BigDecimal("31990.00"), new BigDecimal("0.00"), false);
+    }
+
+    private void assertInstallment(BigDecimal totalPaymentMade, BigDecimal remainingPayment, boolean isActive) {
+        List<CcInstallment> installments = service.getInstallments(false);
+        assertEquals(totalPaymentMade, installments.get(0).getTotalPaymentMade());
+        assertEquals(remainingPayment, installments.get(0).getRemainingPayment());
+        assertEquals(isActive, installments.get(0).isActive());
+    }
+
+    public void testMultipleInstallment() {
+        CcInstallment installment1 = service.addInstallment(new CcInstallment(
+                new Date(), "laptop", new BigDecimal("12"), 12, new BigDecimal("1"), new Date(), new Date(), 1)).getEntity();
+        CcInstallment installment2 = service.addInstallment(new CcInstallment(
+                new Date(), "laptop", new BigDecimal("24"), 12, new BigDecimal("2"), new Date(), new Date(), 1)).getEntity();
+        CcInstallment installment3 = service.addInstallment(new CcInstallment(
+                new Date(), "laptop", new BigDecimal("36"), 12, new BigDecimal("3"), new Date(), new Date(), 1)).getEntity();
+        assertInstallment(3, 3);
+
+        service.addTransaction(constructTransaction("25-Apr-16", "INSTALLMENT", "laptop", "12", installment1));
+        service.addTransaction(constructTransaction("26-Apr-16", "PAYMENT","payment", "12", service.getAllCreditWithoutPayment().get(0)));
+        assertInstallment(2, 3);
+
+        service.addTransaction(constructTransaction("25-Apr-16", "INSTALLMENT", "laptop", "24", installment2));
+        service.addTransaction(constructTransaction("26-Apr-16", "PAYMENT","payment", "24", service.getAllCreditWithoutPayment().get(0)));
+        assertInstallment(1, 3);
+    }
+
+    private void assertInstallment(int activeSize, int allSize) {
+        assertEquals(activeSize, service.getInstallments(true).size());
+        assertEquals(allSize, service.getInstallments(false).size());
     }
 
     public void testTran() {
@@ -93,7 +136,7 @@ public class CCManagerServiceTest extends AndroidTestCase {
     public void testTranWithInstallment() {
         service.addInstallment(new CcInstallment(
                 new Date(), "laptop", new BigDecimal("31990"), 12, new BigDecimal("2665.833333333333"), new LocalDate("2017-02-14").toDate(), new LocalDate("2016-02-14").toDate(), 1)).getEntity();
-        List<CcInstallment> activeInstallments = service.getAllActiveInstallment();
+        List<CcInstallment> activeInstallments = service.getInstallments(true);
         assertFalse(activeInstallments.isEmpty());
 
         service.addTransaction(constructTransaction("9-Feb-16", "CREDIT", "Previous-Balance", "2529.7"));
@@ -234,16 +277,32 @@ public class CCManagerServiceTest extends AndroidTestCase {
         service.addTransaction(constructTransaction("2-Dec-16", "PAYMENT","payment", "4368.34", service.getAllCreditWithoutPayment().get(0)));
         assertTransaction(108, new BigDecimal("2634.22")); // expected
 
-        CcInstallment laptop = service.getAllActiveInstallment().get(0);
-        assertEquals(3, laptop.getRemainingMonths().intValue());
-        assertEquals(new BigDecimal("7997.49"), laptop.getMonthlyAmortization().multiply(new BigDecimal(laptop.getRemainingMonths()))); // 2665.83*3=7997.49
+        CcInstallment laptop = service.getInstallments(true).get(0);
+        assertEquals(2, laptop.getRemainingMonths().intValue());
+        assertEquals(new BigDecimal("5331.66"), laptop.getMonthlyAmortization().multiply(new BigDecimal(laptop.getRemainingMonths()))); // 2665.83*2=5331.66
         assertEquals(new BigDecimal("7997.70"), laptop.getRemainingPayment());
     }
 
-    public void testTranWithMultipleInstallment() {
+    public void testDeleteTransaction() {
+        service.addInstallment(new CcInstallment(
+                new Date(), "laptop", new BigDecimal("31990"), 12, new BigDecimal("2665.833333333333"), new LocalDate("2017-02-14").toDate(), new LocalDate("2016-02-14").toDate(), 1)).getEntity();
+        List<CcInstallment> activeInstallments = service.getInstallments(true);
+        assertEquals(1, activeInstallments.size());
+
+        CcTransaction tranCreditInst = service.addTransaction(constructTransaction("27-Feb-16", "INSTALLMENT", "laptop", "31990", activeInstallments.get(0))).getEntity();
+        CcTransaction tranPayment = service.addTransaction(constructTransaction("29-Feb-16", "PAYMENT", "Payment", "31990", service.getAllCreditWithoutPayment().get(0))).getEntity();
+
+        assertEquals(0, service.getInstallments(true).size());
+
+        service.deleteTransaction(tranPayment);
+        service.deleteTransaction(tranCreditInst);
+        assertEquals(1, service.getInstallments(true).size());
+    }
+
+    public void testTranWithMultiplePayment() {
         service.addInstallment(new CcInstallment(
                 new Date(), "laptop", new BigDecimal("31990"), 12, new BigDecimal("2665.833333333333"), new Date(), new Date(), 1)).getEntity();
-        List<CcInstallment> activeInstallments = service.getAllActiveInstallment();
+        List<CcInstallment> activeInstallments = service.getInstallments(true);
 
         service.addTransaction(constructTransaction("21-Apr-16", "INSTALLMENT", "laptop", "1333", activeInstallments.get(0)));
         service.addTransaction(constructTransaction("21-Apr-16", "INSTALLMENT", "laptop", "1333", activeInstallments.get(0)));

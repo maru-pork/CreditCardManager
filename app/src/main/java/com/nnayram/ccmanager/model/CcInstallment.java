@@ -2,12 +2,7 @@ package com.nnayram.ccmanager.model;
 
 import com.nnayram.ccmanager.core.NumberUtil;
 
-import org.apache.commons.lang3.time.DateUtils;
-import org.joda.time.LocalDate;
-import org.joda.time.Months;
-
 import java.math.BigDecimal;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -24,8 +19,13 @@ public class CcInstallment {
     private BigDecimal monthlyAmortization;
     private Date startDate;
     private Date endDate;
+    private List<CCInstallmentPayment> paidInstallmentPayments;
+
+    // values computed on service
     private Integer active;
-    private List<CcTransaction> tranCreditsWithPayment;
+    private BigDecimal remainingPayment;
+    private BigDecimal totalPaymentMade;
+    private Integer remainingMonths;
 
     public CcInstallment() {
 
@@ -137,38 +137,44 @@ public class CcInstallment {
         return active == 1;
     }
 
-    public List<CcTransaction> getTranCreditsWithPayment() {
-        return tranCreditsWithPayment;
-    }
-
-    public List<CcTransaction> getTranCreditsWithPaymentForEdit() {
-        if (tranCreditsWithPayment == null)
-            return new ArrayList<>();
-        return tranCreditsWithPayment;
-    }
-
-    public void setTranCreditsWithPayment(List<CcTransaction> tranCreditsWithPayment) {
-        this.tranCreditsWithPayment = tranCreditsWithPayment;
-    }
-
     public BigDecimal getRemainingPayment() {
-        BigDecimal totalPayment = BigDecimal.ZERO;
-        for (CcTransaction transaction : getTranCreditsWithPaymentForEdit()) {
-            totalPayment = totalPayment.add(transaction.getAmount());
-        }
-        return NumberUtil.getBigDecimalIfExists(principalAmount).subtract(totalPayment);
+        return remainingPayment;
     }
 
     public String getFormattedRemainingPayment() {
-        return NumberUtil.format().format(getRemainingPayment());
+        return NumberUtil.format().format(NumberUtil.getBigDecimalIfExists(remainingPayment));
+    }
+
+    public void setRemainingPayment(BigDecimal remainingPayment) {
+        this.remainingPayment = remainingPayment;
+    }
+
+    public BigDecimal getTotalPaymentMade() {
+        return totalPaymentMade;
+    }
+
+    public String getFormattedTotalPaymentMade() {
+        return NumberUtil.format().format(NumberUtil.getBigDecimalIfExists(totalPaymentMade));
+    }
+
+    public void setTotalPaymentMade(BigDecimal totalPaymentMade) {
+        this.totalPaymentMade = totalPaymentMade;
+    }
+
+    public List<CCInstallmentPayment> getPaidInstallmentPayments() {
+        return paidInstallmentPayments;
+    }
+
+    public void setPaidInstallmentPayments(List<CCInstallmentPayment> paidInstallmentPayments) {
+        this.paidInstallmentPayments = paidInstallmentPayments;
+    }
+
+    public void setRemainingMonths(Integer remainingMonths) {
+        this.remainingMonths = remainingMonths;
     }
 
     public Integer getRemainingMonths() {
-        if (getStartDate() == null) {
-            return getMonthsToPay();
-        }
-        Months d = Months.monthsBetween(LocalDate.fromDateFields(getStartDate()), LocalDate.now());
-        return getMonthsToPay() == null ? 0 : (getMonthsToPay() - d.getMonths());
+        return remainingMonths;
     }
 
     @Override

@@ -17,7 +17,6 @@ public class DBContract {
         public static final String COLUMN_TYPE = "tran_type";
         public static final String COLUMN_DESC = "tran_description";
         public static final String COLUMN_AMOUNT = "tran_amount";
-        public static final String COLUMN_INSTALLMENT = "installment_id";
     }
 
     public static abstract class Installment implements BaseColumns {
@@ -32,10 +31,12 @@ public class DBContract {
         public static final String COLUMN_ACTIVE = "inst_active";
     }
 
-    public static abstract class PaymentInstallment {
-        public static final String TABLE_NAME = "ccPayment_installment";
+    public static abstract class InstallmentPayment implements BaseColumns {
+        public static final String TABLE_NAME = "ccInstallment_payment";
+        public static final String COLUMN_PAYMENT_AMOUNT = "payment_amount";
+        public static final String COLUMN_PAYMENT_DATE = "payment_date";
         public static final String COLUMN_INSTALLMENT = "ccInstallment_id";
-        public static final String COLUMN_TRAN_CREDIT_INST = "ccTransaction_credit_id";
+        public static final String COLUMN_TRAN_CREDIT_INST = "ccTransaction_inst_id";
         public static final String COLUMN_TRAN_PAYMENT = "ccTransaction_payment_id";
     }
 

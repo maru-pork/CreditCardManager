@@ -2,12 +2,7 @@ package com.nnayram.ccmanager.model;
 
 import com.nnayram.ccmanager.core.NumberUtil;
 
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.math.NumberUtils;
-
 import java.math.BigDecimal;
-import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -21,10 +16,16 @@ public class CcTransaction {
     private String type;
     private String description;
     private BigDecimal amount;
+
+    // values from UI
     private CcInstallment installment;
     private List<CcTransaction> tranCreditInstallments;
 
     public CcTransaction() {
+    }
+
+    public CcTransaction(Long id) {
+        this.id = id;
     }
 
     // constructor for CreditTransactionType : CREDIT, CREDIT_CHARGE, PAYMENT without installment
